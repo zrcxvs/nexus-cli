@@ -1,9 +1,8 @@
-use crate::config;
-use crate::flops::measure_gflops;
-use crate::memory_stats::get_memory_info;
+use crate::environment;
 use crate::nexus_orchestrator::{
     GetProofTaskRequest, GetProofTaskResponse, NodeType, SubmitProofRequest,
 };
+use crate::utils::system_stats::{get_memory_info, measure_gflops};
 use prost::Message;
 use reqwest::{Client, ClientBuilder};
 use std::time::Duration;
@@ -15,7 +14,7 @@ pub struct OrchestratorClient {
 }
 
 impl OrchestratorClient {
-    pub fn new(environment: config::Environment) -> Self {
+    pub fn new(environment: environment::Environment) -> Self {
         Self {
             client: ClientBuilder::new()
                 .timeout(Duration::from_secs(10))

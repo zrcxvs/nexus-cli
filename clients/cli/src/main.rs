@@ -1,9 +1,7 @@
 // Copyright (c) 2024 Nexus. All rights reserved.
 
 mod analytics;
-mod config;
-mod flops;
-mod memory_stats;
+mod environment;
 #[path = "proto/nexus.orchestrator.rs"]
 mod nexus_orchestrator;
 mod node_id_manager;
@@ -14,6 +12,7 @@ mod utils;
 
 use crate::prover::start_prover;
 use crate::setup::SetupResult;
+use crate::utils::system_stats::measure_gflops;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use log::error;
@@ -54,13 +53,13 @@ enum Command {
 }
 
 /// Displays the splash screen with branding and system information.
-fn display_splash_screen(environment: &config::Environment) {
-    utils::cli_branding::print_banner();
+fn display_splash_screen(environment: &environment::Environment) {
+    utils::banner::print_banner();
     println!();
     println!(
         "{}: {}",
         "Computational capacity of this node".bold(),
-        format!("{:.2} GFLOPS", flops::measure_gflops()).bright_cyan()
+        format!("{:.2} GFLOPS", measure_gflops()).bright_cyan()
     );
     println!(
         "{}: {}",
@@ -77,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match cli.command {
         Command::Start { env, max_threads } => {
-            let environment = config::Environment::from_args(env.as_ref());
+            let environment = environment::Environment::from_args(env.as_ref());
             display_splash_screen(&environment);
 
             match setup::run_initial_setup().await {
@@ -120,7 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 /// * `node_id` - The node ID to connect to, if specified.
 /// * `max_threads` - The maximum number of threads to use, if specified.
 async fn prove_parallel(
-    environment: config::Environment,
+    environment: environment::Environment,
     node_id: Option<u64>,
     max_threads: Option<u32>,
 ) {

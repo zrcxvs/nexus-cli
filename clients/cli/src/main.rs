@@ -8,30 +8,27 @@ mod nexus_orchestrator;
 mod orchestrator_client;
 mod prover;
 mod setup;
+mod ui;
 mod utils;
 
-use crate::prover::start_prover;
-use crate::setup::{clear_node_config, SetupResult};
-use crate::utils::system_stats::measure_gflops;
+use crate::config::Config;
+use crate::environment::Environment;
+use crate::orchestrator_client::OrchestratorClient;
+use crate::setup::clear_node_config;
 use clap::{Parser, Subcommand};
-use colored::Colorize;
-use log::error;
-use std::error::Error;
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use ratatui::{backend::CrosstermBackend, Terminal};
 use std::path::PathBuf;
-use std::thread;
-use tokio::runtime::Runtime;
-
-#[derive(clap::ValueEnum, Clone, Debug)]
-enum Environment {
-    Local,
-    Dev,
-    Staging,
-    Beta,
-}
+use std::{error::Error, io};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-struct Cli {
+/// Command-line arguments
+struct Args {
     /// Command to execute
     #[command(subcommand)]
     command: Command,
@@ -41,6 +38,10 @@ struct Cli {
 enum Command {
     /// Start the prover
     Start {
+        /// Node ID
+        #[arg(long, value_name = "NODE_ID")]
+        node_id: Option<u64>,
+
         /// Environment to connect to.
         #[arg(long, value_enum)]
         env: Option<Environment>,
@@ -60,121 +61,71 @@ fn get_config_path() -> Result<PathBuf, ()> {
     Ok(config_path)
 }
 
-/// Displays the splash screen with branding and system information.
-fn display_splash_screen(environment: &environment::Environment) {
-    utils::banner::print_banner();
-    println!();
-    println!(
-        "{}: {}",
-        "Computational capacity of this node".bold(),
-        format!("{:.2} GFLOPS", measure_gflops()).bright_cyan()
-    );
-    println!(
-        "{}: {}",
-        "Environment".bold(),
-        environment.to_string().bright_cyan()
-    );
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialize default log level, but can be overridden by the RUST_LOG environment variable.
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let cli = Cli::parse();
-
-    match cli.command {
-        Command::Start { env, max_threads } => {
-            let environment = environment::Environment::from(env);
-            display_splash_screen(&environment);
+fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+    match args.command {
+        Command::Start {
+            node_id,
+            env,
+            max_threads,
+        } => {
+            let mut node_id = node_id;
+            // If no node ID is provided, try to load it from the config file.
             let config_path = get_config_path().expect("Failed to get config path");
-            match setup::run_initial_setup(&config_path).await? {
-                // == CLI is not registered yet. Perform local proving ==
-                SetupResult::Anonymous => {
-                    println!("Proving anonymously...");
-                    prove_parallel(environment, None, max_threads).await;
-                }
-
-                // == CLI is registered and connected ==
-                SetupResult::Connected(node_id) => {
-                    println!("Proving with existing node id: {}", node_id);
-                    let node_id: u64 = node_id
-                        .parse()
-                        .unwrap_or_else(|_| panic!("invalid node id {}", node_id));
-
-                    prove_parallel(environment, Some(node_id), max_threads).await;
-                }
-
-                // == Something went wrong during setup ==
-                SetupResult::Invalid => {
-                    error!("Invalid setup option selected.");
-                    return Err("Invalid setup option selected".into());
+            if node_id.is_none() && config_path.exists() {
+                if let Ok(config) = Config::load_from_file(&config_path) {
+                    let node_id_as_u64 = config
+                        .node_id
+                        .parse::<u64>()
+                        .expect("Failed to parse node ID");
+                    node_id = Some(node_id_as_u64);
                 }
             }
+
+            let environment = env.unwrap_or_default();
+            start(node_id, environment, max_threads)
         }
         Command::Logout => {
             let config_path = get_config_path().expect("Failed to get config path");
-            println!(
-                "\n===== {} =====\n",
-                "Logging out of the Nexus CLI"
-                    .bold()
-                    .underline()
-                    .bright_cyan()
-            );
-            clear_node_config(&config_path)?;
+            clear_node_config(&config_path).map_err(Into::into)
         }
     }
-
-    Ok(())
 }
 
-/// Proves in parallel using multiple threads.
+/// Starts the Nexus CLI application.
 ///
 /// # Arguments
-/// * `environment` - The environment to connect to.
-/// * `node_id` - The node ID to connect to, if specified.
-/// * `max_threads` - The maximum number of threads to use, if specified.
-async fn prove_parallel(
-    environment: environment::Environment,
+/// * `node_id` - This client's unique identifier, if available.
+/// * `env` - The environment to connect to.
+/// * `max_threads` - Optional maximum number of threads to use for proving.
+fn start(
     node_id: Option<u64>,
-    max_threads: Option<u32>,
-) {
-    if node_id.is_some() {
-        println!(
-            "\n===== {} =====\n",
-            "Starting proof generation".bold().underline().bright_cyan()
-        );
-    } else {
-        println!(
-            "\n===== {} =====\n",
-            "Starting Anonymous proof generation for programs"
-                .bold()
-                .underline()
-                .bright_cyan()
-        );
-    }
+    env: Environment,
+    _max_threads: Option<u32>,
+) -> Result<(), Box<dyn Error>> {
+    // Terminal setup
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
-    // Choose a reasonable number of threads.
-    let num_threads = max_threads.unwrap_or(1).clamp(1, 8);
-    let mut handles = Vec::new();
-    for i in 0..num_threads {
-        let node_id_clone = node_id;
-        let handle = thread::spawn(move || {
-            // Create a new runtime for each thread
-            let rt = Runtime::new().expect("Failed to create Tokio runtime");
-            rt.block_on(async {
-                match start_prover(environment, node_id_clone).await {
-                    Ok(()) => println!("Thread {} completed successfully", i),
-                    Err(e) => eprintln!("Thread {} failed: {:?}", i, e),
-                }
-            });
-        });
+    // Initialize the terminal with Crossterm backend.
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
-        handles.push(handle);
-    }
+    // Create the application and run it.
+    let orchestrator_client = OrchestratorClient::new(env);
+    let app = ui::App::new(node_id, env, orchestrator_client);
+    let res = ui::run(&mut terminal, app);
 
-    for handle in handles {
-        handle.join().unwrap();
-    }
+    // Clean up the terminal after running the application.
+    disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
+    terminal.show_cursor()?;
 
-    println!("All provers finished.");
+    res?;
+    Ok(())
 }

@@ -1,4 +1,4 @@
-//! System stats
+//! System information and performance measurements
 
 use rayon::prelude::*;
 use std::hint::black_box;
@@ -6,6 +6,44 @@ use std::process;
 use std::thread::available_parallelism;
 use std::time::Instant;
 use sysinfo::System;
+
+/// Get the number of logical cores available on the machine.
+pub fn num_cores() -> usize {
+    available_parallelism().map(|n| n.get()).unwrap_or(1) // Fallback to 1 if detection fails
+}
+
+/// Total memory in GB of the machine.
+pub fn total_memory_gb() -> f64 {
+    let mut sys = System::new();
+    sys.refresh_memory();
+    let total_memory = sys.total_memory(); // bytes
+    total_memory as f64 / 1000.0 / 1000.0 / 1000.0 // Convert to GB
+}
+
+/// Memory used by the current process, in GB.
+#[allow(unused)]
+pub fn process_memory_gb() -> f64 {
+    let mut sys = System::new();
+    sys.refresh_all();
+
+    let current_pid = process::id();
+    let current_process = sys
+        .process(sysinfo::Pid::from(current_pid as usize))
+        .expect("Failed to get current process");
+
+    let memory = current_process.memory(); // bytes
+    memory as f64 / 1000.0 / 1000.0 / 1000.0 // Convert to GB
+}
+
+/// Estimate peak FLOPS (in GFLOP/s) of this machine based on the number of cores and clock speed.
+#[allow(unused)]
+pub fn estimate_peak_gflops() -> f32 {
+    // Estimate peak FLOPS based on the number of cores and a rough estimate of operations per cycle
+    // Assuming 4 operations per cycle (e.g., add, multiply, divide, sin)
+    let num_cores = num_cores() as f32;
+    let peak_flops = num_cores * 4.0 * 2.0e9; // TODO: Assuming 2 GHz clock speed
+    (peak_flops / 1e9) as f32 // Convert to GFLOP/s
+}
 
 /// Estimate FLOPS (in GFLOP/s) of this machine.
 pub fn measure_gflops() -> f32 {
@@ -20,8 +58,6 @@ pub fn measure_gflops() -> f32 {
             1
         }
     };
-    println!("Using {} logical cores for FLOPS measurement", num_cores);
-
     let avg_flops: f64 = (0..NUM_REPEATS)
         .map(|_| {
             let start = Instant::now();

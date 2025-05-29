@@ -1,16 +1,20 @@
+//! Nexus Orchestrator Client
+//!
+//! A client for the Nexus Orchestrator, allowing for proof task retrieval and submission.
+
 use crate::environment;
 use crate::nexus_orchestrator::{
     GetProofTaskRequest, GetProofTaskResponse, NodeType, SubmitProofRequest,
 };
-use crate::utils::system_stats::{get_memory_info, measure_gflops};
+use crate::utils::system::{get_memory_info, measure_gflops};
 use prost::Message;
 use reqwest::{Client, ClientBuilder};
 use std::time::Duration;
 
+#[derive(Debug, Clone)]
 pub struct OrchestratorClient {
     client: Client,
     base_url: String,
-    // environment: config::Environment,
 }
 
 impl OrchestratorClient {
@@ -21,7 +25,6 @@ impl OrchestratorClient {
                 .build()
                 .expect("Failed to create HTTP client"),
             base_url: environment.orchestrator_url(),
-            // environment,
         }
     }
 

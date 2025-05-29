@@ -25,6 +25,7 @@ pub enum ProverError {
 /// # Arguments
 /// * `orchestrator_client` - The client to interact with the Nexus Orchestrator.
 /// * `node_id` - The ID of the node to connect to. If `None`, the prover will run in anonymous mode.
+#[allow(unused)]
 pub async fn start_prover(
     environment: Environment,
     node_id: Option<u64>,
@@ -69,7 +70,7 @@ async fn run_anonymous_proving_loop(environment: Environment) -> Result<(), Prov
 }
 
 /// Proves a program locally with hardcoded inputs.
-fn prove_anonymously() -> Result<(), ProverError> {
+pub fn prove_anonymously() -> Result<(), ProverError> {
     let stwo_prover = get_default_stwo_prover()?;
     // The 10th term of the Fibonacci sequence is 55
     let public_input: u32 = 9;
@@ -141,7 +142,7 @@ async fn run_authenticated_proving_loop(
 }
 
 /// Proves a program with a given node ID
-async fn authenticated_proving(
+pub async fn authenticated_proving(
     node_id: u64,
     orchestrator_client: &OrchestratorClient,
     stwo_prover: Stwo<Local>,
@@ -165,7 +166,7 @@ async fn authenticated_proving(
 }
 
 /// Create a Stwo prover for the default program.
-fn get_default_stwo_prover() -> Result<Stwo<Local>, ProverError> {
+pub fn get_default_stwo_prover() -> Result<Stwo<Local>, ProverError> {
     let elf_bytes = include_bytes!("../assets/fib_input");
     Stwo::<Local>::new_from_bytes(elf_bytes).map_err(|e| {
         let msg = format!("Failed to load guest program: {}", e);

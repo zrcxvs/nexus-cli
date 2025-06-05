@@ -1,18 +1,48 @@
 //! Application configuration.
 
+use crate::environment::Environment;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::{fs, path::Path};
+
+/// Get the path to the Nexus config file, typically located at ~/.nexus/config.json.
+pub fn get_config_path() -> Result<PathBuf, std::io::Error> {
+    let home_path = home::home_dir().ok_or(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "Home directory not found",
+    ))?;
+    let config_path = home_path.join(".nexus").join("config.json");
+    Ok(config_path)
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    /// Environment
+    pub environment: String,
+
+    /// The unique identifier for the node, UUIDv4 format.
+    pub user_id: String,
+
+    pub wallet_address: String,
+
+    /// The node's unique identifier, probably an integer
     pub node_id: String,
 }
 
 impl Config {
     /// Create Config with the given node_id.
-    #[allow(unused)]
-    pub fn new(node_id: String) -> Self {
-        Config { node_id }
+    pub fn new(
+        user_id: String,
+        wallet_address: String,
+        node_id: String,
+        environment: Environment,
+    ) -> Self {
+        Config {
+            user_id,
+            wallet_address,
+            node_id,
+            environment: environment.to_string(),
+        }
     }
 
     /// Loads configuration from a JSON file at the given path.
@@ -32,7 +62,6 @@ impl Config {
     ///
     /// # Errors
     /// Returns an `std::io::Error` if writing to file fails or serialization fails.
-    #[allow(unused)]
     pub fn save(&self, path: &Path) -> Result<(), std::io::Error> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
@@ -75,13 +104,23 @@ mod tests {
     use std::io::Write;
     use tempfile::tempdir;
 
+    /// Helper function to create a test configuration.
+    fn get_config() -> Config {
+        Config {
+            environment: "test".to_string(),
+            user_id: "test_user_id".to_string(),
+            wallet_address: "0x1234567890abcdef1234567890abcdef12345678".to_string(),
+            node_id: "test_node_id".to_string(),
+        }
+    }
+
     #[test]
     // Loading a saved configuration file should return the same configuration.
     fn test_load_recovers_saved_config() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.json");
 
-        let config = Config::new("test_node_id".to_string());
+        let config = get_config();
         config.save(&path).unwrap();
 
         let loaded_config = Config::load_from_file(&path).unwrap();
@@ -93,9 +132,7 @@ mod tests {
     fn test_save_creates_directories() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("nonexistent_dir").join("config.json");
-
-        // Attempt to save the configuration
-        let config = Config::new("test_node_id".to_string());
+        let config = get_config();
         let result = config.save(&path);
 
         // Check if the directories were created
@@ -113,11 +150,13 @@ mod tests {
         let path = dir.path().join("config.json");
 
         // Create an initial config and save it
-        let config1 = Config::new("test_node_id_1".to_string());
+        let mut config1 = get_config();
+        config1.user_id = "test_user_id".to_string();
         config1.save(&path).unwrap();
 
         // Create a new config and save it to the same path
-        let config2 = Config::new("test_node_id_2".to_string());
+        let mut config2 = get_config();
+        config2.user_id = "new_test_user_id".to_string();
         config2.save(&path).unwrap();
 
         // Load the saved config and check if it matches the second one
@@ -143,15 +182,10 @@ mod tests {
     fn test_clear_node_config_removes_file() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("config.json");
-
-        // Create a config file
-        let config = Config::new("test_node_id".to_string());
+        let config = get_config();
         config.save(&path).unwrap();
 
-        // Clear the config file
         Config::clear_node_config(&path).unwrap();
-
-        // Check that the file no longer exists
         assert!(!path.exists(), "Config file was not removed");
     }
 }

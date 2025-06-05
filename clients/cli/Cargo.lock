@@ -180,6 +180,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "assert_cmd"
+version = "2.0.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bd389a4b2970a01282ee455294913c0a43724daedcd1a24c3eb0ec1c1320b66"
+dependencies = [
+ "anstyle",
+ "bstr",
+ "doc-comment",
+ "libc",
+ "predicates",
+ "predicates-core",
+ "predicates-tree",
+ "wait-timeout",
+]
+
+[[package]]
 name = "atomic-polyfill"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -268,6 +284,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "bstr"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "234113d19d0d7d613b40e86fb654acf958910802bcceab913a4f9e7cda03b1a4"
+dependencies = [
+ "memchr",
+ "regex-automata 0.4.9",
+ "serde",
 ]
 
 [[package]]
@@ -692,6 +719,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "difflib"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -712,6 +745,12 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
+
+[[package]]
+name = "doc-comment"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
 
 [[package]]
 name = "document-features"
@@ -785,29 +824,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "env_filter"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.11.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
-dependencies = [
- "anstream",
- "anstyle",
- "env_filter",
- "jiff",
- "log",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -852,6 +868,15 @@ name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
+name = "float-cmp"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "fnv"
@@ -1343,30 +1368,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
-name = "jiff"
-version = "0.2.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f02000660d30638906021176af16b17498bd0d12813dbfe7b276d8bc7f3c0806"
-dependencies = [
- "jiff-static",
- "log",
- "portable-atomic",
- "portable-atomic-util",
- "serde",
-]
-
-[[package]]
-name = "jiff-static"
-version = "0.2.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c30758ddd7188629c6713fc45d1188af4f44c90582311d0c8d8c9907f60c48"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1517,8 +1518,8 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "nexus-common"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "rrs-lib",
  "serde",
@@ -1528,8 +1529,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-core"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "nexus-vm",
  "nexus-vm-prover",
@@ -1539,18 +1540,19 @@ dependencies = [
 name = "nexus-network"
 version = "0.8.1"
 dependencies = [
+ "assert_cmd",
  "chrono",
  "clap",
  "colored",
  "crossbeam",
  "crossterm 0.29.0",
- "env_logger",
  "home",
  "iana-time-zone",
  "log",
  "md5",
  "nexus-sdk",
  "postcard",
+ "predicates",
  "prost 0.13.5",
  "prost-build 0.13.5",
  "ratatui",
@@ -1563,12 +1565,13 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.12",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
 name = "nexus-precompile-macros"
 version = "0.1.0"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "nexus-common",
  "proc-macro-crate 3.3.0",
@@ -1581,8 +1584,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-precompiles"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "nexus-common",
  "nexus-precompile-macros",
@@ -1590,16 +1593,16 @@ dependencies = [
 
 [[package]]
 name = "nexus-profiler"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "pprof",
 ]
 
 [[package]]
 name = "nexus-sdk"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "crypto",
  "crypto-common",
@@ -1614,8 +1617,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-sdk-macros"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "nexus-profiler",
  "proc-macro-crate 3.3.0",
@@ -1626,8 +1629,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-vm"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "elf",
  "itertools 0.14.0",
@@ -1652,8 +1655,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-vm-prover"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "impl-trait-for-tuples",
  "itertools 0.13.0",
@@ -1669,8 +1672,8 @@ dependencies = [
 
 [[package]]
 name = "nexus-vm-prover-macros"
-version = "0.3.3"
-source = "git+https://github.com/nexus-xyz/nexus-zkvm?branch=mfaulk/conditionally-compile-profiler#9f8ed8beaf38d67d1bcfa1c2e5b8f500191b8ab4"
+version = "0.3.4"
+source = "git+https://github.com/nexus-xyz/nexus-zkvm?tag=0.3.4#8eb6cb423073ca308d64d9fec21a3bfa59b6e4ea"
 dependencies = [
  "convert_case",
  "proc-macro2",
@@ -1688,6 +1691,12 @@ dependencies = [
  "cfg-if",
  "libc",
 ]
+
+[[package]]
+name = "normalize-line-endings"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
 name = "ntapi"
@@ -1857,21 +1866,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
-name = "portable-atomic"
-version = "1.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "350e9b48cbc6b0e028b0473b114454c6316e57336ee184ceab6e53f72c178b3e"
-
-[[package]]
-name = "portable-atomic-util"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8a2f0d8d040d7848a709caf78912debcc3f33ee4b3cac47d73d1e1069e83507"
-dependencies = [
- "portable-atomic",
-]
-
-[[package]]
 name = "postcard"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1924,6 +1918,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
+]
+
+[[package]]
+name = "predicates"
+version = "3.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d19ee57562043d37e82899fade9a22ebab7be9cef5026b07fda9cdd4293573"
+dependencies = [
+ "anstyle",
+ "difflib",
+ "float-cmp",
+ "normalize-line-endings",
+ "predicates-core",
+ "regex",
+]
+
+[[package]]
+name = "predicates-core"
+version = "1.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "727e462b119fe9c93fd0eb1429a5f7647394014cf3c04ab2c0350eeb09095ffa"
+
+[[package]]
+name = "predicates-tree"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72dd2d6d381dfb73a193c7fca536518d7caee39fc8503f74e7dc0be0531b425c"
+dependencies = [
+ "predicates-core",
+ "termtree",
 ]
 
 [[package]]
@@ -2856,6 +2880,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "termtree"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3222,6 +3252,15 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "wait-timeout"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "want"

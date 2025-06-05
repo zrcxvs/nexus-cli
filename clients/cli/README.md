@@ -7,10 +7,17 @@ It is the **highest-performance** way to participate.
 
 ## 🪄 Quick Start
 
-Install and run the CLI via the install script:
+Run the installation script and start the CLI with your node ID:
 
 ```bash
 curl https://cli.nexus.xyz/ | sh
+nexus-network start --node-id <your-node-id>
+```
+
+For troubleshooting or to see available command line options, run:
+
+```bash
+nexus-network --help start
 ```
 
 Or, with Docker:

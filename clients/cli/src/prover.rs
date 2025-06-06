@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::orchestrator_client::OrchestratorClient;
 use crate::{analytics, environment::Environment};
 use colored::Colorize;
+use ed25519_dalek::SigningKey;
 use log::{error, info, warn};
 use sha3::{Digest, Keccak256};
 use thiserror::Error;
@@ -29,11 +30,12 @@ pub enum ProverError {
 pub async fn start_prover(
     environment: Environment,
     node_id: Option<u64>,
+    signing_key: SigningKey,
 ) -> Result<(), ProverError> {
     match node_id {
         Some(id) => {
             info!("Starting authenticated proving loop for node ID: {}", id);
-            run_authenticated_proving_loop(id, environment).await?;
+            run_authenticated_proving_loop(id, environment, signing_key).await?;
         }
         None => {
             info!("Starting anonymous proving loop");
@@ -87,6 +89,7 @@ pub fn prove_anonymously() -> Result<(), ProverError> {
 async fn run_authenticated_proving_loop(
     node_id: u64,
     environment: Environment,
+    signing_key: SigningKey,
 ) -> Result<(), ProverError> {
     let orchestrator_client = OrchestratorClient::new(environment);
     let mut proof_count = 1;
@@ -100,7 +103,14 @@ async fn run_authenticated_proving_loop(
 
         while attempt <= MAX_ATTEMPTS {
             let stwo_prover = get_default_stwo_prover().expect("Failed to create Stwo prover");
-            match authenticated_proving(node_id, &orchestrator_client, stwo_prover).await {
+            match authenticated_proving(
+                node_id,
+                &orchestrator_client,
+                stwo_prover,
+                signing_key.clone(),
+            )
+            .await
+            {
                 Ok(_) => {
                     info!("Proving succeeded on attempt #{attempt}!");
                     success = true;
@@ -146,6 +156,7 @@ pub async fn authenticated_proving(
     node_id: u64,
     orchestrator_client: &OrchestratorClient,
     stwo_prover: Stwo<Local>,
+    signing_key: SigningKey,
 ) -> Result<(), ProverError> {
     info!("Fetching a task to prove from Nexus Orchestrator...");
     let task = orchestrator_client
@@ -157,7 +168,7 @@ pub async fn authenticated_proving(
     let proof_bytes = prove_helper(stwo_prover, public_input)?;
     let proof_hash = format!("{:x}", Keccak256::digest(&proof_bytes));
     orchestrator_client
-        .submit_proof(&task.task_id, &proof_hash, proof_bytes)
+        .submit_proof(&task.task_id, &proof_hash, proof_bytes, signing_key)
         .await
         .map_err(|e| ProverError::Orchestrator(format!("Failed to submit proof: {}", e)))?;
 

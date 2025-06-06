@@ -12,6 +12,36 @@ use prost::Message;
 use reqwest::{Client, ClientBuilder};
 use std::time::Duration;
 
+#[async_trait::async_trait]
+pub trait Orchestrator {
+    fn environment(&self) -> &Environment;
+
+    /// Registers a new user with the orchestrator.
+    async fn register_user(
+        &self,
+        user_id: &str,
+        wallet_address: &str,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Registers a new node with the orchestrator.
+    async fn register_node(&self, user_id: &str) -> Result<String, Box<dyn std::error::Error>>;
+
+    /// Retrieves a proof task for the node.
+    async fn get_proof_task(
+        &self,
+        node_id: &str,
+    ) -> Result<GetProofTaskResponse, Box<dyn std::error::Error>>;
+
+    /// Submits a proof to the orchestrator.
+    async fn submit_proof(
+        &self,
+        task_id: &str,
+        proof_hash: &str,
+        proof: Vec<u8>,
+        signing_key: SigningKey,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+}
+
 #[derive(Debug, Clone)]
 pub struct OrchestratorClient {
     client: Client,
@@ -27,10 +57,6 @@ impl OrchestratorClient {
                 .expect("Failed to create HTTP client"),
             environment,
         }
-    }
-
-    pub fn environment(&self) -> &Environment {
-        &self.environment
     }
 
     /// Makes a request to the Nexus Orchestrator.
@@ -99,9 +125,16 @@ impl OrchestratorClient {
             Err(_e) => Ok(None),
         }
     }
+}
+
+#[async_trait::async_trait]
+impl Orchestrator for OrchestratorClient {
+    fn environment(&self) -> &Environment {
+        &self.environment
+    }
 
     /// Registers a new node with the orchestrator.
-    pub async fn register_user(
+    async fn register_user(
         &self,
         user_id: &str,
         wallet_address: &str,
@@ -120,7 +153,7 @@ impl OrchestratorClient {
     }
 
     /// Registers a new node with the orchestrator.
-    pub async fn register_node(&self, user_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+    async fn register_node(&self, user_id: &str) -> Result<String, Box<dyn std::error::Error>> {
         let request = crate::nexus_orchestrator::RegisterNodeRequest {
             node_type: NodeType::CliProver as i32,
             user_id: user_id.to_string(),
@@ -138,7 +171,7 @@ impl OrchestratorClient {
         Ok(response.node_id)
     }
 
-    pub async fn get_proof_task(
+    async fn get_proof_task(
         &self,
         node_id: &str,
     ) -> Result<GetProofTaskResponse, Box<dyn std::error::Error>> {
@@ -155,7 +188,7 @@ impl OrchestratorClient {
         Ok(response)
     }
 
-    pub async fn submit_proof(
+    async fn submit_proof(
         &self,
         task_id: &str,
         proof_hash: &str,

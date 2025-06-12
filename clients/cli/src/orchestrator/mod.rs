@@ -7,9 +7,12 @@ mod client;
 pub use client::OrchestratorClient;
 pub mod error;
 
+#[cfg(test)]
+use mockall::{automock, predicate::*};
+
+#[cfg_attr(test, automock)]
 #[async_trait::async_trait]
-#[allow(dead_code)]
-pub trait Orchestrator {
+pub trait Orchestrator: Send + Sync {
     fn environment(&self) -> &Environment;
 
     /// Registers a new user with the orchestrator.

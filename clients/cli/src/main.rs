@@ -8,6 +8,7 @@ mod keys;
 mod nexus_orchestrator;
 mod orchestrator;
 mod prover;
+mod prover_runtime;
 pub mod system;
 mod task;
 mod ui;
@@ -85,7 +86,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            start(node_id, environment, max_threads)
+            start(node_id, environment, max_threads).await
         }
         Command::Logout => {
             println!("Logging out and clearing node configuration file...");
@@ -184,7 +185,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 /// * `node_id` - This client's unique identifier, if available.
 /// * `env` - The environment to connect to.
 /// * `max_threads` - Optional maximum number of threads to use for proving.
-fn start(
+async fn start(
     node_id: Option<u64>,
     env: Environment,
     _max_threads: Option<u32>,
@@ -204,7 +205,8 @@ fn start(
     let mut csprng = rand_core::OsRng;
     let signing_key: SigningKey = SigningKey::generate(&mut csprng);
     let app = ui::App::new(node_id, orchestrator_client, signing_key);
-    let res = ui::run(&mut terminal, app);
+    let res = ui::run(&mut terminal, app) // this call must now be `async fn run()`
+        .await;
 
     // Clean up the terminal after running the application.
     disable_raw_mode()?;
@@ -216,5 +218,6 @@ fn start(
     terminal.show_cursor()?;
 
     res?;
+    println!("Nexus CLI application exited successfully.");
     Ok(())
 }

@@ -4,22 +4,20 @@ mod splash;
 
 use crate::environment::Environment;
 use crate::orchestrator::{Orchestrator, OrchestratorClient};
-use crate::prover::{authenticated_proving, prove_anonymously};
+use crate::prover_runtime::{WorkerEvent, start_anonymous_workers, start_authenticated_workers};
 use crate::ui::dashboard::{DashboardState, render_dashboard};
 use crate::ui::login::render_login;
 use crate::ui::splash::render_splash;
-use chrono::Local;
-use crossbeam::channel::unbounded;
 use crossterm::event::{self, Event, KeyCode};
 use ed25519_dalek::SigningKey;
 use ratatui::{Frame, Terminal, backend::Backend};
 use std::collections::VecDeque;
-use std::thread;
-use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use tokio::runtime::Runtime;
+use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 
 /// The different screens in the application.
+#[derive(Debug, Clone)]
 pub enum Screen {
     /// Splash screen shown at the start of the application.
     Splash,
@@ -34,6 +32,7 @@ pub enum Screen {
 const MAX_EVENTS: usize = 100;
 
 /// Application state
+#[derive(Debug)]
 pub struct App {
     /// The start time of the application, used for computing uptime.
     pub start_time: Instant,
@@ -51,10 +50,13 @@ pub struct App {
     pub current_screen: Screen,
 
     /// Events received from worker threads.
-    pub events: VecDeque<ProverEvent>,
+    pub events: VecDeque<WorkerEvent>,
 
     /// Proof-signing key.
     signing_key: SigningKey,
+
+    shutdown_sender: broadcast::Sender<()>,
+    worker_handles: Vec<JoinHandle<()>>,
 }
 
 impl App {
@@ -64,6 +66,7 @@ impl App {
         orchestrator_client: OrchestratorClient,
         signing_key: SigningKey,
     ) -> Self {
+        let (shutdown_sender, _) = broadcast::channel(1); // Only one shutdown signal needed
         Self {
             start_time: Instant::now(),
             node_id,
@@ -72,10 +75,13 @@ impl App {
             current_screen: Screen::Splash,
             events: Default::default(),
             signing_key,
+            shutdown_sender,
+            worker_handles: Vec::new(),
         }
     }
 
     /// Handles a complete login process, transitioning to the dashboard screen.
+    #[allow(unused)]
     pub fn login(&mut self) {
         let node_id = Some(123); // Placeholder for node ID, replace with actual logic to get node ID
         let state = DashboardState::new(node_id, self.environment, self.start_time, &self.events);
@@ -84,33 +90,49 @@ impl App {
 }
 
 /// Runs the application UI in a loop, handling events and rendering the appropriate screen.
-pub fn run<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> std::io::Result<()> {
+pub async fn run<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> std::io::Result<()> {
     let splash_start = Instant::now();
     let splash_duration = Duration::from_secs(2);
 
-    // Spawn worker threads for background tasks
-    let num_workers = 1; // TODO: Keep this low for now to avoid hitting rate limits.
-    let mut workers: Vec<JoinHandle<()>> = Vec::with_capacity(num_workers);
-    let (sender, receiver) = unbounded::<ProverEvent>();
-    for worker_id in 0..num_workers {
-        let handle = match app.node_id {
-            Some(node_id) => spawn_prover(
-                worker_id,
+    let num_workers = 3; // TODO: Keep this low for now to avoid hitting rate limits.
+
+    // Receives events from prover worker threads.
+    let (mut prover_event_receiver, join_handles) = match app.node_id {
+        Some(node_id) => {
+            start_authenticated_workers(
                 node_id,
-                app.orchestrator_client.clone(),
                 app.signing_key.clone(),
-                sender.clone(),
-            ),
-            None => spawn_anonymous_prover(worker_id, sender.clone()),
-        };
+                app.orchestrator_client.clone(),
+                num_workers,
+                app.shutdown_sender.subscribe(),
+            )
+            .await
+        }
+        None => start_anonymous_workers(num_workers, app.shutdown_sender.subscribe()).await,
+    };
+    app.worker_handles = join_handles;
 
-        workers.push(handle);
-    }
-    drop(sender); // Drop original sender to allow receiver to detect end-of-stream.
-    let mut active_workers = num_workers;
-
+    // UI event loop
     loop {
-        terminal.draw(|f| render(f, &app))?;
+        // Drain prover events from the async channel into app.events
+        while let Ok(event) = prover_event_receiver.try_recv() {
+            if app.events.len() >= MAX_EVENTS {
+                app.events.pop_front();
+            }
+            app.events.push_back(event);
+        }
+
+        // Update the state based on the current screen
+        match app.current_screen {
+            Screen::Splash => {}
+            Screen::Login => {}
+            Screen::Dashboard(_) => {
+                let state =
+                    DashboardState::new(app.node_id, app.environment, app.start_time, &app.events);
+                app.current_screen = Screen::Dashboard(state);
+            }
+        }
+        terminal.draw(|f| render(f, &app.current_screen))?;
 
         // Handle splash-to-login transition
         if let Screen::Splash = app.current_screen {
@@ -135,6 +157,12 @@ pub fn run<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> std::io::Res
 
                 // Handle exit events
                 if matches!(key.code, KeyCode::Esc | KeyCode::Char('q')) {
+                    // Send shutdown signal to workers
+                    let _ = app.shutdown_sender.send(());
+                    // Waiting for all worker threads to finish makes the UI unresponsive.
+                    // for handle in app.worker_handles.drain(..) {
+                    //     let _ = handle.await;
+                    // }
                     return Ok(());
                 }
 
@@ -159,142 +187,14 @@ pub fn run<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> std::io::Res
                 }
             }
         }
-
-        if active_workers > 0 {
-            while let Ok(event) = receiver.try_recv() {
-                // If Done, decrement active_workers
-                if let ProverEvent::Done {
-                    worker_id: _worker_id,
-                } = &event
-                {
-                    active_workers -= 1;
-                };
-
-                // Add to bounded event buffer
-                if app.events.len() >= MAX_EVENTS {
-                    app.events.pop_front(); // Evict oldest
-                }
-                app.events.push_back(event);
-            }
-        }
     }
 }
 
 /// Renders the current screen based on the application state.
-fn render(f: &mut Frame, app: &App) {
-    match &app.current_screen {
+fn render(f: &mut Frame, screen: &Screen) {
+    match screen {
         Screen::Splash => render_splash(f),
         Screen::Login => render_login(f),
-        Screen::Dashboard(_state) => {
-            // Update the dashboard state with the latest events
-            let state =
-                DashboardState::new(app.node_id, app.environment, app.start_time, &app.events);
-            render_dashboard(f, &state)
-        }
+        Screen::Dashboard(state) => render_dashboard(f, state),
     }
-}
-
-/// Events emitted by prover threads.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ProverEvent {
-    Message {
-        worker_id: usize,
-        data: String,
-    },
-    #[allow(unused)]
-    Done {
-        worker_id: usize,
-    },
-}
-
-/// Spawns a new thread for the anonymous prover.
-fn spawn_anonymous_prover(
-    worker_id: usize,
-    sender: crossbeam::channel::Sender<ProverEvent>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        // Create a new runtime for each thread
-        let rt = Runtime::new().expect("Failed to create Tokio runtime");
-        loop {
-            rt.block_on(async {
-                match prove_anonymously() {
-                    Ok(_) => {
-                        let now = Local::now();
-                        let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-                        let message = format!(
-                            "✅ [{}] Proof completed successfully [Anonymous Prover {}]",
-                            timestamp, worker_id
-                        );
-                        sender
-                            .send(ProverEvent::Message {
-                                worker_id,
-                                data: message,
-                            })
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        let message = format!("Anonymous Prover {}: Error - {}", worker_id, e);
-                        sender
-                            .send(ProverEvent::Message {
-                                worker_id,
-                                data: message,
-                            })
-                            .unwrap();
-                    }
-                }
-            });
-        }
-    })
-}
-
-/// Spawns a new thread for the prover.
-fn spawn_prover(
-    worker_id: usize,
-    node_id: u64,
-    orchestrator_client: OrchestratorClient,
-    signing_key: SigningKey,
-    sender: crossbeam::channel::Sender<ProverEvent>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        // Create a new runtime for each thread
-        let rt = Runtime::new().expect("Failed to create Tokio runtime");
-        loop {
-            rt.block_on(async {
-                let stwo_prover =
-                    crate::prover::get_default_stwo_prover().expect("Failed to create Stwo prover");
-                match authenticated_proving(
-                    node_id,
-                    &orchestrator_client,
-                    stwo_prover,
-                    signing_key.clone(),
-                )
-                .await
-                {
-                    Ok(_) => {
-                        let now = Local::now();
-                        let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-                        let message = format!(
-                            "✅ [{}] Proof completed successfully [Prover {}]",
-                            timestamp, worker_id
-                        );
-                        sender
-                            .send(ProverEvent::Message {
-                                worker_id,
-                                data: message,
-                            })
-                            .unwrap();
-                    }
-                    Err(e) => {
-                        let message = format!("Worker {}: Error - {}", worker_id, e);
-                        sender
-                            .send(ProverEvent::Message {
-                                worker_id,
-                                data: message,
-                            })
-                            .unwrap();
-                    }
-                }
-            });
-        }
-    })
 }

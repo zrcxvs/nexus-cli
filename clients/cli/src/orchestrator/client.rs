@@ -6,6 +6,7 @@ use crate::environment::Environment;
 use crate::nexus_orchestrator::{
     GetProofTaskRequest, GetProofTaskResponse, GetTasksRequest, GetTasksResponse, NodeType,
     RegisterNodeRequest, RegisterNodeResponse, RegisterUserRequest, SubmitProofRequest,
+    UserResponse,
 };
 use crate::orchestrator::Orchestrator;
 use crate::orchestrator::error::OrchestratorError;
@@ -38,6 +39,34 @@ impl OrchestratorClient {
 impl Orchestrator for OrchestratorClient {
     fn environment(&self) -> &Environment {
         &self.environment
+    }
+
+    /// Get the user ID associated with a wallet address.
+    async fn get_user(&self, wallet_address: &str) -> Result<String, OrchestratorError> {
+        // Canonicalise + percent-encode the address                        ────────┐
+        let wallet_path = urlencoding::encode(wallet_address).into_owned();
+        let url = format!(
+            "{}/v3/users/{}",
+            self.environment.orchestrator_url().trim_end_matches('/'),
+            wallet_path
+        );
+        let response = self
+            .client
+            .get(&url)
+            .header("Content-Type", "application/octet-stream")
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(OrchestratorError::from_response(response).await);
+        }
+
+        let response_bytes = response.bytes().await?;
+        let user_response: UserResponse = match UserResponse::decode(response_bytes) {
+            Ok(msg) => msg,
+            Err(e) => return Err(OrchestratorError::Decode(e)),
+        };
+        Ok(user_response.user_id)
     }
 
     /// Registers a new node with the orchestrator.
@@ -280,6 +309,21 @@ mod live_orchestrator_tests {
             Err(e) => {
                 panic!("Failed to get tasks: {}", e);
             }
+        }
+    }
+
+    #[tokio::test]
+    // #[ignore] // This test requires a live orchestrator instance.
+    /// Should return the user ID associated with a previously-registered wallet address.
+    async fn test_get_user() {
+        let client = super::OrchestratorClient::new(Environment::Beta);
+        let wallet_address = "0x52908400098527886E0F7030069857D2E4169EE8";
+        match client.get_user(&wallet_address).await {
+            Ok(user_id) => {
+                println!("User ID for wallet {}: {}", wallet_address, user_id);
+                assert_eq!(user_id, "e3c62f51-e566-4f9e-bccb-be9f8cb474be");
+            }
+            Err(e) => panic!("Failed to get user ID: {}", e),
         }
     }
 }

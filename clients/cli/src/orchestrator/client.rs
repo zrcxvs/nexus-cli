@@ -313,7 +313,7 @@ mod live_orchestrator_tests {
     }
 
     #[tokio::test]
-    // #[ignore] // This test requires a live orchestrator instance.
+    #[ignore] // This test requires a live orchestrator instance.
     /// Should return the user ID associated with a previously-registered wallet address.
     async fn test_get_user() {
         let client = super::OrchestratorClient::new(Environment::Beta);

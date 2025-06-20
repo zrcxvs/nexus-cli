@@ -12,6 +12,7 @@ mod prover_runtime;
 mod register;
 pub mod system;
 mod task;
+mod task_cache;
 mod ui;
 
 use crate::config::{Config, get_config_path};

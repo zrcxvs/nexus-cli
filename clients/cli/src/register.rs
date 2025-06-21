@@ -3,6 +3,7 @@
 use crate::config::Config;
 use crate::keys;
 use crate::orchestrator::Orchestrator;
+use crate::ui::splash::LOGO_NAME;
 use std::path::Path;
 
 /// Registers a user with the orchestrator.
@@ -65,6 +66,7 @@ pub async fn register_user(
     match orchestrator.register_user(&uuid, wallet_address).await {
         Ok(_) => println!("User {} registered successfully.", uuid),
         Err(e) => {
+            print_friendly_error();
             eprintln!("Failed to register user: {}", e);
             return Err(e.into());
         }
@@ -131,11 +133,21 @@ pub async fn register_node(
                 Ok(())
             }
             Err(e) => {
+                print_friendly_error();
                 eprintln!("Failed to register node: {}", e);
                 Err(e.into())
             }
         }
     }
+}
+
+fn print_friendly_error() {
+    // RGB: FF = 255, AA = 170, 00 = 0
+    println!("\x1b[38;2;255;170;0m{}\x1b[0m", LOGO_NAME);
+    println!("\x1b[38;2;255;170;0mWe'll be back shortly\x1b[0m");
+    println!(
+        "The Prover network’s orchestrater is under unprecedented traffic. Team has been notified. Thank you for your patience while issue is resolved.\n"
+    );
 }
 
 #[cfg(test)]

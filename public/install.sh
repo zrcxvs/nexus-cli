@@ -20,7 +20,7 @@ NC='\033[0m'  # No Color
 # -----------------------------------------------------------------------------
 if [ -z "$NONINTERACTIVE" ] && [ "${#NODE_ID}" -ne "28" ]; then
     echo ""
-    echo "${ORANGE}Devnet is over. Testnet III is coming soon. Until then, proving is disabled.${NC}"
+    echo "${GREEN}Testnet III is now live!${NC}"
     echo ""
 fi
 
@@ -145,7 +145,8 @@ fi
 echo "Downloading latest release for $PLATFORM-$ARCH..."
 curl -L -o "$BIN_DIR/nexus-network" "$LATEST_RELEASE_URL"
 chmod +x "$BIN_DIR/nexus-network"
-
+ln -s "$BIN_DIR/nexus-network" "$BIN_DIR/nexus-cli"
+chmod +x "$BIN_DIR/nexus-cli"
 
 # -----------------------------------------------------------------------------
 # 6) Add $BIN_DIR to PATH if not already present
@@ -176,4 +177,6 @@ echo ""
 echo "${GREEN}Installation complete!${NC}"
 echo "Restart your terminal or run the following command to update your PATH:"
 echo "  source $PROFILE_FILE"
-echo "Start the Nexus CLI with: nexus-network start --node-id <your-node-id>"
+echo ""
+echo "Register your user to begin linked proving with the Nexus CLI by: nexus-cli register-user --wallet-address <WALLET_ADDRESS>"
+echo "Or follow the guide at https://docs.nexus.xyz/layer-1/testnet/cli-node"

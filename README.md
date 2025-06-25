@@ -28,6 +28,7 @@ There have been several testnets so far:
 - Testnet I: [December 9 – 13, 2024](https://blog.nexus.xyz/the-new-nexus-testnet-is-live/)
 - Testnet II: [February 18 – 22, 2025](https://blog.nexus.xyz/testnet-ii-is-open/)
 - Devnet: February 22 - June 20 2025
+- Testnet III: [Ongoing](https://blog.nexus.xyz/live-everywhere/)
 
 ---
 
@@ -44,11 +45,13 @@ curl https://cli.nexus.xyz/ | sh
 ```
 
 This will:
-1. Download and install the latest precompiled binary for your platform
-2. Prompt you to accept the Terms of Use
-3. Start the CLI in interactive mode
+1. Download and install the latest precompiled binary for your platform.
+2. Prompt you to accept the Terms of Use.
+3. Start the CLI in interactive mode.
 
-### Non-Interactive Installation
+The exact installation script is viewable [here](./public/install.sh).
+
+#### Non-Interactive Installation
 
 For automated installations (e.g., in CI):
 
@@ -56,6 +59,36 @@ For automated installations (e.g., in CI):
 curl -sSf https://cli.nexus.xyz/ -o install.sh
 chmod +x install.sh
 NONINTERACTIVE=1 ./install.sh
+```
+
+### Proving
+
+Proving with the CLI is documented [here](https://docs.nexus.xyz/layer-1/testnet/cli-node).
+
+To start with an existing node ID, run:
+
+```bash
+nexus-cli start --node-id <your-node-id>
+```
+
+Alternatively, you can register your wallet address and create a node ID with the CLI, or at at [app.nexus.xyz](https://app.nexus.xyz).
+
+```bash
+nexus-cli register-user --wallet-address <your-wallet-address>
+nexus-cli register-node
+nexus-cli start
+```
+
+The `register-user` and `register-node` commands will save your credentials to `~/.nexus/config.json`. To clear credentials, run:
+
+```bash
+nexus-cli logout
+```
+
+For troubleshooting or to see available command line options, run:
+
+```bash
+nexus-cli --help
 ```
 
 ---
@@ -109,3 +142,59 @@ Interested in contributing to the Nexus Network CLI? Check out our
 For most users, we recommend using the precompiled binaries as described above.
 The contributor guide is intended for those who want to modify or improve the CLI
 itself.
+
+### 🛠  Developer Guide
+
+The following steps may be required in order to setup a development environment for contributing to the project:
+
+#### Linux
+
+```bash
+sudo apt update
+sudo apt upgrade
+sudo apt install build-essential pkg-config libssl-dev git-all
+sudo apt install protobuf-compiler
+```
+
+#### macOS
+
+```bash
+# Install using Homebrew
+brew install protobuf
+
+# Verify installation
+protoc --version
+```
+
+#### Windows
+
+[Install WSL](https://learn.microsoft.com/en-us/windows/wsl/install),
+then see Linux instructions above.
+
+```bash
+# Install using Chocolatey
+choco install protobuf
+```
+
+### Building ProtoBuf files
+
+To build the ProtoBuf files, run the following command in the `clients/cli` directory:
+
+```bash
+cargo build --features build_proto
+```
+
+### Creating a Release
+
+To create a release, update the package version in `Cargo.toml`, then create and push a new (annotated) tag, e.g.:
+
+```bash
+git tag -a v0.1.2 -m "Release v0.1.2"
+git push origin v0.1.2
+```
+
+This will trigger the GitHub Actions release workflow that compiles binaries and pushes the Docker image, in
+addition to creating release.
+
+**WARNING**: Creating a release through the GitHub UI creates a new release but does **NOT** trigger
+the workflow. This leads to a release without a Docker image or binaries, which breaks the installation script.

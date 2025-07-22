@@ -76,6 +76,7 @@
 
 use crate::error_classifier::LogLevel;
 use crate::events::{Event, EventType};
+use crate::version_requirements::{ConstraintType, VersionCheckResult, VersionRequirements};
 use reqwest::{Client, ClientBuilder};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -86,7 +87,7 @@ use tokio::time::{Instant, sleep};
 #[cfg(test)]
 use mockall::{automock, predicate::*};
 
-// Check for updates every 24 hours
+// Check for updates and constraints every 24 hours
 const VERSION_CHECK_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 // GitHub API endpoint for the latest release
@@ -109,6 +110,13 @@ pub struct VersionInfo {
     pub update_available: bool,
     pub release_url: Option<String>,
     pub last_check: Option<Instant>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VersionConstraintState {
+    pub last_constraint_check: Option<Instant>,
+    pub current_constraints: Option<VersionRequirements>,
+    pub last_violation: Option<VersionCheckResult>,
 }
 
 impl VersionInfo {
@@ -214,7 +222,7 @@ pub async fn version_checker_task(
     .await;
 }
 
-/// Background task that periodically checks for version updates with configurable interval
+/// Background task that periodically checks for version updates and constraints with configurable interval
 pub async fn version_checker_task_with_interval(
     version_checker: Box<dyn VersionCheckable>,
     event_sender: mpsc::Sender<Event>,
@@ -222,48 +230,20 @@ pub async fn version_checker_task_with_interval(
     check_interval: Duration,
 ) {
     let mut version_info = VersionInfo::new(version_checker.current_version().to_string());
+    let mut constraint_state = VersionConstraintState {
+        last_constraint_check: None,
+        current_constraints: None,
+        last_violation: None,
+    };
 
-    // Perform initial check immediately
-    match version_checker.check_latest_version().await {
-        Ok(release) => {
-            version_info.update_from_release(release.clone());
-
-            if version_info.update_available {
-                let message = format!(
-                    "🚀 New version {} available! Current: {} → Release: {}",
-                    release.tag_name, version_info.current_version, release.html_url
-                );
-
-                let event =
-                    Event::version_checker_with_level(message, EventType::Success, LogLevel::Info);
-
-                if (event_sender.send(event).await).is_err() {
-                    return;
-                }
-            } else {
-                let message = format!(
-                    "✅ Version {} is up to date\n",
-                    version_info.current_version
-                );
-
-                let event =
-                    Event::version_checker_with_level(message, EventType::Refresh, LogLevel::Debug);
-
-                if (event_sender.send(event).await).is_err() {
-                    return;
-                }
-            }
-        }
-        Err(e) => {
-            let message = format!("Failed to check for updates: {}", e);
-            let event =
-                Event::version_checker_with_level(message, EventType::Error, LogLevel::Debug);
-
-            if (event_sender.send(event).await).is_err() {
-                return;
-            }
-        }
-    }
+    // Perform initial checks immediately
+    perform_version_and_constraint_check(
+        &*version_checker,
+        &mut version_info,
+        &mut constraint_state,
+        &event_sender,
+    )
+    .await;
 
     // After initial check, wait for the interval then check periodically
     let mut last_check = Instant::now();
@@ -272,51 +252,120 @@ pub async fn version_checker_task_with_interval(
         tokio::select! {
             _ = shutdown.recv() => break,
             _ = sleep(Duration::from_secs(60)) => {
-                // Check if it's time for a version check
+                // Check if it's time for a check
                 if last_check.elapsed() >= check_interval {
                     last_check = Instant::now();
-
-                    match version_checker.check_latest_version().await {
-                        Ok(release) => {
-                            let was_update_available = version_info.update_available;
-                            version_info.update_from_release(release.clone());
-
-                            // Only send event if this is a new update detection
-                            if version_info.update_available && !was_update_available {
-                                let message = format!(
-                                    "🚀 New version {} available! Current: {} → Release: {}",
-                                    release.tag_name,
-                                    version_info.current_version,
-                                    release.html_url
-                                );
-
-                                let event = Event::version_checker_with_level(
-                                    message,
-                                    EventType::Success,
-                                    LogLevel::Info,
-                                );
-
-                                if (event_sender.send(event).await).is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            // Log error but don't spam (debug level)
-                            let message = format!("Failed to check for updates: {}", e);
-                            let event = Event::version_checker_with_level(
-                                message,
-                                EventType::Error,
-                                LogLevel::Debug,
-                            );
-
-                            if (event_sender.send(event).await).is_err() {
-                                break;
-                            }
-                        }
-                    }
+                    perform_version_and_constraint_check(&*version_checker, &mut version_info, &mut constraint_state, &event_sender).await;
                 }
             }
+        }
+    }
+}
+
+/// Perform both version update check and constraint check
+async fn perform_version_and_constraint_check(
+    version_checker: &dyn VersionCheckable,
+    version_info: &mut VersionInfo,
+    constraint_state: &mut VersionConstraintState,
+    event_sender: &mpsc::Sender<Event>,
+) {
+    // Check for version updates
+    match version_checker.check_latest_version().await {
+        Ok(release) => {
+            version_info.update_from_release(release.clone());
+
+            // Check version constraints to determine what message to show
+            let constraint_result = match VersionRequirements::fetch().await {
+                Ok(requirements) => {
+                    // Update constraint state
+                    constraint_state.current_constraints = Some(requirements.clone());
+                    constraint_state.last_constraint_check = Some(Instant::now());
+
+                    requirements
+                        .check_version_constraints(
+                            &version_info.current_version,
+                            Some(&release.tag_name),
+                            Some(&release.html_url),
+                        )
+                        .ok()
+                        .flatten()
+                }
+                Err(_) => {
+                    // If we can't fetch requirements, default to the old behavior
+                    if version_info.update_available {
+                        Some(VersionCheckResult {
+                            constraint_type: ConstraintType::Notice,
+                            message: format!(
+                                "🚀 New version {} available! Current: {} → Release: {}",
+                                release.tag_name, version_info.current_version, release.html_url
+                            ),
+                        })
+                    } else {
+                        None
+                    }
+                }
+            };
+
+            // Only send event if constraint status has changed
+            let should_send_event = match (&constraint_state.last_violation, &constraint_result) {
+                (None, None) => false, // No change
+                (Some(old), Some(new)) => {
+                    // Check if constraint type or message has changed
+                    old.constraint_type != new.constraint_type || old.message != new.message
+                }
+                _ => true, // One is Some, other is None - status changed
+            };
+
+            if should_send_event {
+                if let Some(result) = constraint_result {
+                    let event = match result.constraint_type {
+                        ConstraintType::Blocking => Event::version_checker_with_level(
+                            result.message.clone(),
+                            EventType::Error,
+                            LogLevel::Error,
+                        ),
+                        ConstraintType::Warning => Event::version_checker_with_level(
+                            result.message.clone(),
+                            EventType::Error,
+                            LogLevel::Warn,
+                        ),
+                        ConstraintType::Notice => Event::version_checker_with_level(
+                            result.message.clone(),
+                            EventType::Success,
+                            LogLevel::Info,
+                        ),
+                    };
+
+                    let _ = event_sender.send(event).await;
+
+                    // Update constraint state
+                    constraint_state.last_violation = Some(result);
+                } else {
+                    // No violation - send up-to-date message
+                    let message = format!(
+                        "✅ Version {} is up to date\n",
+                        version_info.current_version
+                    );
+
+                    let event = Event::version_checker_with_level(
+                        message,
+                        EventType::Refresh,
+                        LogLevel::Debug,
+                    );
+
+                    let _ = event_sender.send(event).await;
+
+                    // Clear constraint state
+                    constraint_state.last_violation = None;
+                }
+            }
+        }
+        Err(e) => {
+            let message = format!("Failed to check for updates: {}", e);
+            let event =
+                Event::version_checker_with_level(message, EventType::Error, LogLevel::Debug);
+
+            let _ = event_sender.send(event).await;
         }
     }
 }
@@ -393,16 +442,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_checker_task_with_new_version_available() {
+        // Test with a version that should trigger an update notification
+        let current_version = "0.9.0";
+        let new_version = "0.9.1";
+
         // Create mock version checker
         let mut mock_checker = MockVersionCheckable::new();
         mock_checker
             .expect_current_version()
-            .return_const("0.9.0".to_string());
+            .return_const(current_version.to_string());
 
         // Mock returns a newer version
         mock_checker
             .expect_check_latest_version()
-            .returning(|| Ok(create_mock_release("v0.9.1")));
+            .returning(move || Ok(create_mock_release(&format!("v{}", new_version))));
 
         // Set up channels
         let (event_sender, mut event_receiver) = mpsc::channel(10);
@@ -429,7 +482,10 @@ mod tests {
         // Check that we received the update event
         let mut received_update_event = false;
         while let Ok(event) = event_receiver.try_recv() {
-            if event.msg.contains("🚀 New version v0.9.1 available!") {
+            if event
+                .msg
+                .contains(&format!("🚀 New version v{} available!", new_version))
+            {
                 received_update_event = true;
                 assert_eq!(event.event_type, EventType::Success);
                 break;
@@ -443,16 +499,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_checker_task_with_no_update_needed() {
+        // Test with a version that should not trigger any constraints
+        let test_version = "0.9.1";
+
         // Create mock version checker
         let mut mock_checker = MockVersionCheckable::new();
         mock_checker
             .expect_current_version()
-            .return_const("0.9.1".to_string());
+            .return_const(test_version.to_string());
 
         // Mock returns same version (no update needed)
         mock_checker
             .expect_check_latest_version()
-            .returning(|| Ok(create_mock_release("v0.9.1")));
+            .returning(move || Ok(create_mock_release(&format!("v{}", test_version))));
 
         // Set up channels
         let (event_sender, mut event_receiver) = mpsc::channel(10);
@@ -476,19 +535,27 @@ mod tests {
         let _ = shutdown_sender.send(());
         task_handle.await.unwrap();
 
-        // Check that we received the up-to-date event (debug level)
+        // Check that we received the up-to-date event (debug level) or no events (if no status change)
         let mut received_up_to_date_event = false;
+        let mut event_count = 0;
         while let Ok(event) = event_receiver.try_recv() {
-            if event.msg.contains("✅ Version 0.9.1 is up to date") {
+            event_count += 1;
+            if event
+                .msg
+                .contains(&format!("✅ Version {} is up to date", test_version))
+            {
                 received_up_to_date_event = true;
                 assert_eq!(event.event_type, EventType::Refresh);
                 assert_eq!(event.log_level, LogLevel::Debug);
                 break;
             }
         }
+
+        // With the new constraint system, we might not send an event if there's no status change
+        // So we accept either an up-to-date event or no events at all
         assert!(
-            received_up_to_date_event,
-            "Should have received up-to-date notification"
+            received_up_to_date_event || event_count == 0,
+            "Should have received up-to-date notification or no events (no status change)"
         );
     }
 
@@ -545,16 +612,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_version_checker_only_notifies_once_for_same_update() {
+        // Test that multiple API calls only result in one notification
+        let current_version = "0.9.0";
+        let new_version = "0.9.1";
+
         // Create mock version checker
         let mut mock_checker = MockVersionCheckable::new();
         mock_checker
             .expect_current_version()
-            .return_const("0.9.0".to_string());
+            .return_const(current_version.to_string());
 
         // Mock always returns newer version - called multiple times but only first notification sent
         mock_checker
             .expect_check_latest_version()
-            .returning(|| Ok(create_mock_release("v0.9.1")))
+            .returning(move || Ok(create_mock_release(&format!("v{}", new_version))))
             .times(..); // Allow any number of calls
 
         // Set up channels
@@ -584,7 +655,10 @@ mod tests {
         let mut all_events = Vec::new();
         while let Ok(event) = event_receiver.try_recv() {
             all_events.push(event.msg.clone());
-            if event.msg.contains("🚀 New version v0.9.1 available!") {
+            if event
+                .msg
+                .contains(&format!("🚀 New version v{} available!", new_version))
+            {
                 update_event_count += 1;
             }
         }

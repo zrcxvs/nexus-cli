@@ -493,7 +493,6 @@ mod tests {
                     || event.msg.contains("Please upgrade");
                 let is_update_message =
                     event.msg.contains("New version") && event.msg.contains("available");
-
                 assert!(
                     is_constraint_message || is_update_message,
                     "Version checker should send either a constraint violation or update available message, got: {}",

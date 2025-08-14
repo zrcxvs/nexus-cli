@@ -334,3 +334,23 @@ pub async fn track_authenticated_proof_analytics(
     .await;
     // TODO: Catch errors and log them
 }
+
+/// Track analytics for likely OOM error in proof subprocess (non-blocking)
+pub async fn track_likely_oom_error(task: Task, environment: Environment, client_id: String) {
+    let analytics_data = json!({
+        "program_name": task.program_id,
+        "task_id": task.task_id,
+    });
+
+    let _ = track(
+        vec![
+            "cli_likely_oom_error".to_string(),
+            "likely_oom_error".to_string(),
+        ],
+        analytics_data,
+        &environment,
+        client_id,
+    )
+    .await;
+    // TODO: Catch errors and log them
+}

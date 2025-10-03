@@ -6,4 +6,9 @@ RUN apk update && \
     chmod +x install.sh && \
     NONINTERACTIVE=1 ./install.sh
 
-ENTRYPOINT ["/root/.nexus/bin/nexus-cli"]
+ENV NEXUS_HOME=/root/.nexus
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
